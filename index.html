@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Inspector 3D — Etapa 2</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a0f1e; overflow: hidden; }
+    canvas { display: block; }
+
+    #info {
+      position: absolute;
+      top: 16px; left: 16px;
+      color: #64b5f6;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.8;
+      pointer-events: none;
+    }
+    #info strong {
+      color: #fff;
+      font-size: 14px;
+      display: block;
+      margin-bottom: 2px;
+    }
+    #info span { color: #8899bb; font-size: 10px; }
+  </style>
+</head>
+<body>
+
+<div id="info">
+  <strong id="nombre-estructura">Cargando...</strong>
+  <span id="contador"></span><br>
+  🖱 Arrastra · Scroll zoom
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+    "three/examples/jsm/controls/OrbitControls": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/controls/OrbitControls.js"
+  }
+}
+</script>
+
+<script type="module">
+
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+
+  // ─────────────────────────────────────────────────────────────
+  // COLORES Y RADIOS POR SUBTIPO
+  // Para cambiar el color de un tipo de elemento, solo edita aquí
+  // ─────────────────────────────────────────────────────────────
+  const COLORES = {
+    columna:  0xf97316,
+    viga:     0x22c55e,
+    diagonal: 0xef4444,
+    tirante:  0xeab308,
+  };
+
+  const RADIOS = {
+    columna:  0.10,
+    viga:     0.08,
+    diagonal: 0.06,
+    tirante:  0.05,
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // ESCENA, CÁMARA, RENDERIZADOR
+  // ─────────────────────────────────────────────────────────────
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0a0f1e);
+
+  const camera = new THREE.PerspectiveCamera(
+    45,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(10, 8, 12);
+  camera.lookAt(2, 2, 2);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  document.body.appendChild(renderer.domElement);
+
+  // ─────────────────────────────────────────────────────────────
+  // LUCES
+  // ─────────────────────────────────────────────────────────────
+  scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  dirLight.position.set(10, 20, 10);
+  scene.add(dirLight);
+
+  const fillLight = new THREE.DirectionalLight(0x4488ff, 0.4);
+  fillLight.position.set(-10, 5, -10);
+  scene.add(fillLight);
+
+  // ─────────────────────────────────────────────────────────────
+  // GRID DEL SUELO
+  // ─────────────────────────────────────────────────────────────
+  const grid = new THREE.GridHelper(20, 20, 0x1a3a6a, 0x0f1e38);
+  scene.add(grid);
+
+  // ─────────────────────────────────────────────────────────────
+  // FUNCIÓN: dibujar una barra entre dos puntos
+  // Recibe dos Vector3 y el subtipo. Calcula largo, centro y orientación.
+  // ─────────────────────────────────────────────────────────────
+  function crearBarra(p1, p2, subtipo) {
+    const direccion = new THREE.Vector3().subVectors(p2, p1);
+    const largo     = direccion.length();
+    const centro    = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+
+    const radio = RADIOS[subtipo] ?? 0.07;
+    const color = COLORES[subtipo] ?? 0x888888;
+
+    const geo = new THREE.CylinderGeometry(radio, radio, largo, 12);
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      metalness:         0.65,
+      roughness:         0.4,
+      emissive:          color,
+      emissiveIntensity: 0.08,
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(centro);
+    mesh.quaternion.setFromUnitVectors(
+      new THREE.Vector3(0, 1, 0),
+      direccion.clone().normalize()
+    );
+
+    scene.add(mesh);
+    return mesh;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // FUNCIÓN: dibujar un nodo como esfera
+  // ─────────────────────────────────────────────────────────────
+  function crearNodo(punto) {
+    const geo = new THREE.SphereGeometry(0.12, 12, 12);
+    const mat = new THREE.MeshStandardMaterial({
+      color:     0xe2e8f0,
+      metalness: 0.8,
+      roughness: 0.2,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(punto);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // CARGAR Y PROCESAR EL JSON
+  // fetch() lee estructura.json y lo convierte en objeto JavaScript
+  // ─────────────────────────────────────────────────────────────
+  fetch('estructura.json')
+    .then(respuesta => respuesta.json())
+    .then(datos => {
+
+      document.getElementById('nombre-estructura').textContent = datos.nombre;
+      document.getElementById('contador').textContent =
+        `${datos.nodos.length} nodos · ${datos.elementos.length} elementos`;
+
+      // PASO 1: convertir array de nodos a diccionario por ID
+      // nodos["N3"] → Vector3(0, 4, 0)
+      const nodos = {};
+      for (const nodo of datos.nodos) {
+        nodos[nodo.id] = new THREE.Vector3(nodo.x, nodo.y, nodo.z);
+      }
+
+      // PASO 2: dibujar esferas en cada nodo
+      for (const nodo of datos.nodos) {
+        crearNodo(nodos[nodo.id]);
+      }
+
+      // PASO 3: dibujar cada elemento según su tipo
+      for (const elemento of datos.elementos) {
+        if (elemento.tipo === 'barra') {
+          const p1 = nodos[elemento.de];
+          const p2 = nodos[elemento.a];
+          crearBarra(p1, p2, elemento.subtipo);
+        }
+        // Aquí agregaremos 'placa' y 'volumen' en etapas siguientes
+      }
+
+    })
+    .catch(error => {
+      console.error('Error cargando estructura.json:', error);
+      document.getElementById('nombre-estructura').textContent =
+        '⚠ No se encontró estructura.json';
+    });
+
+  // ─────────────────────────────────────────────────────────────
+  // ORBIT CONTROLS
+  // ─────────────────────────────────────────────────────────────
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance   = 2;
+  controls.maxDistance   = 50;
+
+  // ─────────────────────────────────────────────────────────────
+  // LOOP DE ANIMACIÓN
+  // ─────────────────────────────────────────────────────────────
+  function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // ─────────────────────────────────────────────────────────────
+  // RESPONSIVO
+  // ─────────────────────────────────────────────────────────────
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+</script>
+</body>
+</html>
