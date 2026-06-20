@@ -188,15 +188,16 @@
     .btn-severidad.activo[data-nivel="Moderado"] { background: var(--moderado); }
     .btn-severidad.activo[data-nivel="Severo"]   { background: var(--severo); }
 
-    /* Glosario de Leve/Moderado/Severo: siempre visible bajo los botones, como referencia */
+    /* Glosario de Leve/Moderado/Severo: oculto hasta que se elige una opción de ese concepto */
     .lista-explicaciones {
+      display: none;
       margin-top: 14px;
       padding-top: 14px;
       border-top: 1px solid #1a3a6a;
-      display: flex;
       flex-direction: column;
       gap: 14px;
     }
+    .lista-explicaciones.visible { display: flex; }
     .explicacion-card {
       border-left: 3px solid transparent;
       padding-left: 10px;
@@ -774,6 +775,7 @@
     seleccionActual = { RC: null, CO: null, CP: null, DU: null };
     document.querySelectorAll('.btn-severidad').forEach(b => b.classList.remove('activo'));
     document.querySelectorAll('.explicacion-card').forEach(c => c.classList.remove('activo'));
+    document.querySelectorAll('.lista-explicaciones').forEach(l => l.classList.remove('visible'));
     document.getElementById('campo-observaciones').value = '';
     actualizarPreviewNivel();
 
@@ -879,14 +881,17 @@
       seleccionActual[codigo] = 'OK';
       const bloque = document.querySelector(`.concepto[data-concepto="${codigo}"]`);
       bloque.querySelectorAll('.btn-severidad').forEach(b => b.classList.toggle('activo', b.dataset.nivel === 'OK'));
-      // OK no tiene tarjeta en el glosario, así que se limpia cualquier resalte previo
       bloque.querySelectorAll('.explicacion-card').forEach(c => c.classList.remove('activo'));
     });
+    // Es una acción masiva, no enfocada en un concepto puntual: no corresponde dejar
+    // ningún glosario abierto (igual que cuando ya calificaste un tema y pasaste al siguiente).
+    document.querySelectorAll('.lista-explicaciones').forEach(l => l.classList.remove('visible'));
     actualizarPreviewNivel();
   }
 
   document.querySelectorAll('.concepto').forEach(bloque => {
     const codigo = bloque.dataset.concepto;
+    const glosario = bloque.querySelector('.lista-explicaciones');
 
     bloque.querySelectorAll('.btn-severidad').forEach(boton => {
       boton.addEventListener('click', () => {
@@ -895,7 +900,12 @@
         bloque.querySelectorAll('.btn-severidad').forEach(b => b.classList.remove('activo'));
         boton.classList.add('activo');
 
-        // Resaltar, dentro del glosario siempre visible, la tarjeta del nivel elegido
+        // Acordeón: se oculta el glosario de TODOS los conceptos (incluidos los que
+        // ya tienen una calificación elegida) y solo se muestra el del concepto activo.
+        document.querySelectorAll('.lista-explicaciones').forEach(l => l.classList.remove('visible'));
+        glosario.classList.add('visible');
+
+        // Resaltar, dentro del glosario, la tarjeta del nivel elegido
         // (OK no tiene tarjeta propia, así que solo se resalta si es Leve/Moderado/Severo)
         bloque.querySelectorAll('.explicacion-card').forEach(c => c.classList.remove('activo'));
         const tarjeta = bloque.querySelector(`.explicacion-card[data-nivel="${nivel}"]`);
