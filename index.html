@@ -26,40 +26,45 @@
     #info strong { color: #fff; font-size: 14px; display: block; margin-bottom: 2px; }
     #info span   { color: #8899bb; font-size: 10px; }
 
-    /* ── PANEL LATERAL ── */
+    /* ── PANEL INFERIOR (bottom sheet) ── */
     #panel {
-      position: absolute;
-      top: 0; right: 0;
-      width: 260px;
-      height: 100%;
-      background: rgba(10, 15, 30, 0.92);
-      border-left: 1px solid #1a3a6a;
-      padding: 24px 20px;
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      width: 100%;
+      max-height: 38vh;
+      background: rgba(10, 15, 30, 0.97);
+      border-top: 1px solid #1a3a6a;
+      padding: 14px 20px calc(18px + env(safe-area-inset-bottom, 0px));
       font-family: 'Segoe UI', system-ui, sans-serif;
       color: #cdd6f4;
-      transform: translateX(100%);
+      transform: translateY(100%);
       transition: transform 0.25s ease;
       overflow-y: auto;
+      z-index: 500;
+      box-shadow: 0 -8px 24px rgba(0,0,0,0.45);
     }
-    #panel.visible { transform: translateX(0); }
+    #panel.visible { transform: translateY(0); }
 
-    #panel h2 {
-      font-size: 11px;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #64b5f6;
-      margin-bottom: 16px;
+    .panel-handle {
+      width: 36px; height: 4px;
+      background: #334155;
+      border-radius: 2px;
+      margin: 0 auto 14px;
     }
-    .campo { margin-bottom: 14px; }
-    .campo label {
-      display: block;
-      font-size: 10px;
-      color: #8899bb;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 3px;
+
+    .panel-fila {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
     }
-    .campo p { font-size: 14px; font-weight: 600; color: #fff; }
+    .panel-info { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .panel-id { font-size: 17px; font-weight: 700; color: #fff; }
+    .panel-tipo { font-size: 11px; color: #8899bb; text-transform: uppercase; letter-spacing: 0.06em; }
+    .panel-badges { display: flex; gap: 8px; align-items: center; }
+
     .badge {
       display: inline-block;
       padding: 3px 10px;
@@ -69,9 +74,8 @@
     }
 
     .btn-iniciar {
-      margin-top: 18px;
       width: 100%;
-      padding: 12px;
+      padding: 13px;
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       border: none;
       border-radius: 8px;
@@ -271,24 +275,18 @@
   🖱 Arrastra · Scroll zoom · Clic en elemento
 </div>
 
-<!-- PANEL LATERAL -->
+<!-- PANEL INFERIOR -->
 <div id="panel">
-  <h2>Elemento seleccionado</h2>
-  <div class="campo">
-    <label>ID</label>
-    <p id="p-id">—</p>
-  </div>
-  <div class="campo">
-    <label>Tipo</label>
-    <p id="p-tipo">—</p>
-  </div>
-  <div class="campo">
-    <label>Subtipo</label>
-    <p><span class="badge" id="badge-subtipo">—</span></p>
-  </div>
-  <div class="campo" id="campo-estado" style="display:none;">
-    <label>Estado actual</label>
-    <p><span class="badge" id="badge-estado">—</span></p>
+  <div class="panel-handle"></div>
+  <div class="panel-fila">
+    <div class="panel-info">
+      <span class="panel-id" id="p-id">—</span>
+      <span class="panel-tipo" id="p-tipo">—</span>
+    </div>
+    <div class="panel-badges">
+      <span class="badge" id="badge-subtipo">—</span>
+      <span class="badge" id="badge-estado" style="display:none;">—</span>
+    </div>
   </div>
 
   <button class="btn-iniciar" id="btn-iniciar">Iniciar Inspección</button>
@@ -656,17 +654,16 @@
     badgeSub.style.background = coloresSub.bg;
     badgeSub.style.color      = coloresSub.txt;
 
-    const campoEstado = document.getElementById('campo-estado');
     const badgeEstado = document.getElementById('badge-estado');
     const ultimoNivel = obtenerUltimoNivel(datos.id);
 
     if (ultimoNivel) {
-      campoEstado.style.display = 'block';
+      badgeEstado.style.display = 'inline-block';
       badgeEstado.textContent = NIVEL_INFO[ultimoNivel].texto.split(' · ')[0]; // "Nivel A"
       badgeEstado.style.background = NIVEL_INFO[ultimoNivel].bg;
       badgeEstado.style.color = '#fff';
     } else {
-      campoEstado.style.display = 'none';
+      badgeEstado.style.display = 'none';
     }
 
     document.getElementById('panel').classList.add('visible');
@@ -676,12 +673,28 @@
   }
 
   // ─────────────────────────────────────────────────────────────
-  // CLIC EN EL MODELO 3D
-  // Se ignoran los clics que ocurren dentro del panel o la cartilla,
-  // para que sus botones no disparen también la deselección del raycaster.
+  // SELECCIÓN EN EL MODELO 3D
+  // Se usa pointerdown + pointerup (en vez de 'click') escuchando directo
+  // sobre el canvas, porque en celular OrbitControls a veces interpreta
+  // el toque como inicio de arrastre y el evento 'click' del navegador
+  // no llega a dispararse. Se compara la posición de bajada y subida del
+  // dedo/mouse: si el movimiento es mínimo, se trata como una selección;
+  // si fue mayor (el usuario rotó la cámara), se ignora.
   // ─────────────────────────────────────────────────────────────
-  window.addEventListener('click', (evento) => {
-    if (evento.target.closest('#panel') || evento.target.closest('#cartilla')) return;
+  let inicioPuntero = null;
+  const UMBRAL_ARRASTRE = 6; // píxeles
+
+  renderer.domElement.addEventListener('pointerdown', (evento) => {
+    inicioPuntero = { x: evento.clientX, y: evento.clientY };
+  });
+
+  renderer.domElement.addEventListener('pointerup', (evento) => {
+    if (!inicioPuntero) return;
+    const dx = evento.clientX - inicioPuntero.x;
+    const dy = evento.clientY - inicioPuntero.y;
+    const distancia = Math.sqrt(dx * dx + dy * dy);
+    inicioPuntero = null;
+    if (distancia > UMBRAL_ARRASTRE) return; // fue arrastre de cámara, no selección
 
     punteroNDC.x =  (evento.clientX / window.innerWidth)  * 2 - 1;
     punteroNDC.y = -(evento.clientY / window.innerHeight) * 2 + 1;
